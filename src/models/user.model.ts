@@ -4,14 +4,14 @@ import Aws from 'aws-sdk';
 
 const Sequelize = require('sequelize');
 const Op = Sequelize.Op;
+
+import { UserSchema } from '../schemas/postgresql';
+import config from '../../config';
+import { getErrorResponse, getSuccessResponse } from '../util/response';
 const dbConfig = require('../schemas/dynamoDB/config');
 
 Aws.config.update(dbConfig.aws_local_config);
 const docClient = new Aws.DynamoDB.DocumentClient();
-
-import { UserSchema } from '../schemas/postgresql';
-import config from '../../config';
-
 export default class UserModel {
   public static login = async (credentials: {
     email: string;
@@ -102,7 +102,7 @@ export default class UserModel {
       const params = {
         TableName: dbConfig.aws_user_table_name,
         Item: {
-          id: user.id,
+          userId: user.id,
           first_name: user.first_name,
           last_name: user.last_name,
           email: user.email,
@@ -127,44 +127,80 @@ export default class UserModel {
   };
 
   public static updateUser = async (userObject: any) => {
-    UserSchema.update(userObject, {
-      where: { id: userObject.id },
-      returning: true
+    const updatedUser = await UserSchema.update(userObject, {
+      where: { id: userObject.id }
     });
-  };
 
-  public static getUserById = async (userId: any) => {
-    UserSchema.findOne({
-      where: { id: userId }
-    });
-  };
-
-  public static getAllUsers = async (userId: any) => {
-    let result;
-
-    const ScanParams = {
-      TableName: dbConfig.aws_user_table_name, // give it your table name
-      Select: 'ALL_ATTRIBUTES'
+    const params: any = {
+      TableName: dbConfig.aws_user_table_name,
+      Key: {
+        userId: userObject.id
+      },
+      UpdateExpression:
+        'Set first_name = :fn, last_name = :ln, username = :un, image = :img, email = :e, contact_no = :cn, role = :r, status = :s',
+      ExpressionAttributeValues: {
+        ':fn': userObject.first_name,
+        ':ln': userObject.last_name,
+        ':un': userObject.username,
+        ':img': userObject.image ? userObject.image : null,
+        ':e': userObject.email,
+        ':cn': userObject.contact_no,
+        ':r': userObject.role,
+        ':s': userObject.status
+      },
+      ReturnValues: 'UPDATED_NEW'
     };
-
-    docClient.scan(ScanParams, (err, data) => {
+    docClient.update(params, (err, data) => {
       if (err) {
         console.log({ err });
         return err;
       } else {
-        result = data?.Items;
+        console.log({ data });
       }
     });
-    if (result === []) {
-      result = await UserSchema.findAll({
-        where: { status: { [Op.or]: [1, 0] } }
-      });
-
-      result.map(item => {});
-    }
-
-    return result;
   };
+
+  public static getUserById = (userId: any): Promise<any> =>
+    new Promise((reject, resolve) => {
+      const ddb = new Aws.DynamoDB();
+      const params = {
+        TableName: dbConfig.aws_user_table_name,
+        KeyConditionExpression: 'userId = :userId',
+        ExpressionAttributeValues: {
+          ':userId': { N: userId }
+        }
+      };
+      ddb.query(params, (err, data) => {
+        if (err) {
+          const error = getErrorResponse('Error in fetch user', err);
+          reject(error);
+        } else {
+          const { Items } = data;
+          const response = getSuccessResponse('Fetch user successfully', Items);
+          resolve(response);
+        }
+      });
+    });
+
+  public static getAllUsers = (): Promise<any> =>
+    new Promise((reject, resolve) => {
+      const ScanParams = {
+        TableName: dbConfig.aws_user_table_name // give it your table name
+      };
+      return docClient.scan(ScanParams, (err, data) => {
+        if (err) {
+          const error = getErrorResponse('Error in fetch users', err);
+          reject(error);
+        } else {
+          const { Items } = data;
+          const response = getSuccessResponse(
+            'Fetch all users successfully',
+            Items
+          );
+          resolve(response);
+        }
+      });
+    });
 
   public static deleteUser = async userId => {
     const params = {
@@ -179,7 +215,6 @@ export default class UserModel {
         return err;
       } else {
         console.log('Success', data);
-
         UserSchema.update(
           { status: 2 },
           {

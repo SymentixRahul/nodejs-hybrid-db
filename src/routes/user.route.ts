@@ -8,6 +8,7 @@ const router = Router();
 import { UserController } from '../controllers';
 
 module.exports = (app: Express, passport: PassportStatic) => {
+  router.post('/login', UserController.login);
 
   router.post(
     '/register',
@@ -15,9 +16,16 @@ module.exports = (app: Express, passport: PassportStatic) => {
     UserController.signup
   );
 
-  router.get('/login', UserController.login);
+  router.patch(
+    '/',
+    uploadFileMiddleware.single('image'),
+    UserController.updateUser
+  );
 
-  return router
+  router.get('/:id', UserController.getUserById);
+
+  router.get('/', UserController.getAllUsers);
+  return router;
 };
 
 export default router;

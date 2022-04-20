@@ -2,7 +2,7 @@
   "TableName": "user",
   "AttributeDefinitions": [
     {
-      "AttributeName": "id",
+      "AttributeName": "userId",
       "AttributeType": "N"
     },
     {
@@ -12,7 +12,7 @@
   ],
   "KeySchema": [
     {
-      "AttributeName": "id",
+      "AttributeName": "userId",
       "KeyType": "HASH"
     },
     {
